@@ -1,0 +1,6 @@
+[package]
+name = "oxido"
+version = "0.1.0"
+authors = ["driden <776982+driden@users.noreply.github.com>"]
+
+[dependencies]
