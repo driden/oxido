@@ -1,25 +1,28 @@
 //No me rompas las pelotas
 #![allow(dead_code)]
+#![allow(unused_assignments)]
 
-#[derive(PartialEq, Debug)]
+use std::fmt;
+
+#[derive(PartialEq, Debug,Clone)]
 enum TerrainGround {
     Soil,
     Stone,
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug,Clone)]
 enum TerrainBlock {
     Tree,
     Soil,
     Stone,
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug,Clone)]
 enum Being {
     Orc,
     Human,
 }
-
+#[derive(Debug, PartialEq,Clone)]
 struct Square {
     ground: TerrainGround,
     block: Option<TerrainBlock>,
@@ -31,6 +34,7 @@ struct Grid {
     squares: Vec<Square>,
 }
 
+#[derive(Debug, PartialEq)]
 enum Direction {
     West,
     East,
@@ -41,8 +45,28 @@ enum Direction {
 #[derive(Debug, PartialEq)]
 enum MovementError {
     NoBeingInSquare,
-    BeingAlreadyInSquare,
-    BeingCannotMoveToStoneGround,
+    AnotherBeingInSquare,
+    FellOffTheGrid,
+    MovedToBadTerrain
+}
+
+impl fmt::Display for MovementError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            MovementError::AnotherBeingInSquare => {
+                write!(f, "There's a being in the direction you're trying to move")
+            }
+            MovementError::MovedToBadTerrain => {
+                write!(f, "This being cannot move to stone ground")
+            }
+            MovementError::NoBeingInSquare => {
+                write!(f, "There's no being you can move at those coordinates")
+            }
+            MovementError::FellOffTheGrid => {
+                write!(f, "New coordinates are off the grid!")
+            }
+        }
+    }
 }
 
 impl Grid {
@@ -67,54 +91,69 @@ impl Grid {
         return coord.0 * self.size.0 + coord.1;
     }
 
-    fn get_new_coords(&self, coord: (usize, usize), dir:Direction) -> (usize, usize) {
-       return match dir {
-            Direction::West => (coord.0 - 1, coord.1),
-            Direction::East => (coord.0, coord.1 + 1),
-            Direction::North => (coord.0, coord.1 - 1),
-            Direction::South => (coord.0 - 1, coord.1 + 1),
-        }
-
+    fn get_new_coords(&self, coord: (usize, usize), dir: &Direction) -> (usize, usize) {
+        let x = coord.0;
+        let y = coord.1;
+        return match dir {
+            &Direction::West => (x, y - 1),
+            &Direction::East => (x, y + 1),
+            &Direction::North => (x - 1, y),
+            &Direction::South => (x + 1, y),
+        };
     }
+
     fn move_being_in_coord(
-        &self,
+        &mut self,
         coord: (usize, usize),
         dir: Direction,
     ) -> Result<(usize, usize), MovementError> {
-        let index_coords = self.get_vec_index((coord.0, coord.1));
-        let new_coords = self.get_new_coords(coord,dir);
-        let index_new_coords = self.get_vec_index(new_coords);
+        let copy_of_squares = self.squares.clone();
         
-        let square = self.squares
+        let index_coords = self.get_vec_index((coord.0, coord.1));
+        let new_coords = self.get_new_coords(coord, &dir);
+        let index_new_coords = self.get_vec_index(new_coords);
+
+        let square = copy_of_squares
                     // posicion en el vector (matriz representada como vector)
                     .get(index_coords) 
                     .expect("Index out of bounds trying to get being.");
 
-        let destination_square = self.squares
-                    // Posicion a la que se mueve el ser
-                    .get(index_new_coords)
-                    .expect("New coords (after movement) would be out of bounds.");
+        if square.being == None {
+            return Err(MovementError::NoBeingInSquare);
+        }
 
-        let mut being_new_coords: Result<(usize, usize), MovementError> = 
-            match square.being {
-                Some(_) => Ok(coord),
-                None => Err(MovementError::NoBeingInSquare),
+        if new_coords.0 >= self.size.0 || new_coords.1 >= self.size.1 {
+            return Err(MovementError::FellOffTheGrid);
+        }
+
+        let new_square = copy_of_squares.get(index_new_coords).unwrap();
+
+        if new_square.being != None {
+            return Err(MovementError::AnotherBeingInSquare);
+        }
+
+        if new_square.ground == TerrainGround::Stone {
+            return Err(MovementError::MovedToBadTerrain);
+        }
+
+        // Move the being
+        // new square!
+        self.squares[index_new_coords] =
+            Square{
+                ground: new_square.ground.clone(),
+                block: new_square.block.clone(),
+                being: square.being.clone()
+            };
+        
+        // Old square!
+        self.squares[index_coords] =
+            Square {
+                ground: square.ground.clone(),
+                block: square.block.clone(),
+                being: None
             };
 
-        println!("New Coords {:?}", being_new_coords);
-
-        being_new_coords = match destination_square.being {
-            Some(_) => Err(MovementError::BeingAlreadyInSquare),
-            None => Ok(new_coords),
-        };
-
-        // Solo se puede mover a Soil
-        being_new_coords = match destination_square.ground {
-            TerrainGround::Stone => Err(MovementError::BeingCannotMoveToStoneGround),
-            TerrainGround::Soil => Ok(new_coords),
-        };
-
-        return being_new_coords;
+        Ok(new_coords)
     }
 }
 
@@ -142,10 +181,46 @@ mod tests {
     }
 
     #[test]
-    fn test_move_being_in_coord_no_being() {
+    fn test_get_new_coords_north() {
         let grid = ::Grid::generate_empty(3, 3);
+        let coord: (usize, usize) = (1, 1);
+
+        let new_coord = grid.get_new_coords(coord, &::Direction::North);
+        assert_eq!((0, 1), new_coord);
+    }
+
+    #[test]
+    fn test_get_new_coords_east() {
+        let grid = ::Grid::generate_empty(3, 3);
+        let coord: (usize, usize) = (1, 1);
+
+        let new_coord = grid.get_new_coords(coord, &::Direction::East);
+        assert_eq!((1, 2), new_coord);
+    }
+
+    #[test]
+    fn test_get_new_coords_south() {
+        let grid = ::Grid::generate_empty(3, 3);
+        let coord: (usize, usize) = (1, 1);
+
+        let new_coord = grid.get_new_coords(coord, &::Direction::South);
+        assert_eq!((2, 1), new_coord);
+    }
+
+    #[test]
+    fn test_get_new_coords_west() {
+        let grid = ::Grid::generate_empty(3, 3);
+        let coord: (usize, usize) = (1, 1);
+
+        let new_coord = grid.get_new_coords(coord, &::Direction::West);
+        assert_eq!((1, 0), new_coord);
+    }
+
+    #[test]
+    fn test_move_being_in_coord_no_being() {
+        let mut grid = ::Grid::generate_empty(3, 3);
         assert_eq!(
-            grid.move_being_in_coord((1, 0), ::Direction::West),
+            grid.move_being_in_coord((1, 1), ::Direction::West),
             Err(::MovementError::NoBeingInSquare)
         );
     }
@@ -157,12 +232,20 @@ mod tests {
         grid.squares[4] = ::Square {
             ground: ::TerrainGround::Soil,
             block: None,
-            being: Some(::Being::Orc),
+            being: Some(::Being::Orc)
+        };
+        grid.squares[7] = ::Square {
+            ground: ::TerrainGround::Soil,
+            block: None,
+            being: Some(::Being::Human)
         };
 
+        // 0  1  2
+        // 3 Orc 5
+        // 6  7  8
         assert_eq!(
             grid.move_being_in_coord((2, 1), ::Direction::North),
-            Err(::MovementError::BeingAlreadyInSquare)
+            Err(::MovementError::AnotherBeingInSquare)
         );
     }
 }
