@@ -248,4 +248,19 @@ mod tests {
             Err(::MovementError::AnotherBeingInSquare)
         );
     }
+
+    #[test]
+    fn test_move_successfully() {
+        let mut grid = ::Grid::generate_empty(3, 3);
+        let human = ::Being::Human;
+
+        grid.squares[0].being = Some(human);
+        assert_eq!(
+            grid.move_being_in_coord((0,0), ::Direction::South),
+            Ok((1,0))
+        );
+
+        assert_eq!(grid.squares[0].being, None);
+        assert!(grid.squares[3].being != None);
+    }
 }
