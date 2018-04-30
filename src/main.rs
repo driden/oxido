@@ -3,26 +3,28 @@
 #![allow(unused_assignments)]
 
 use std::fmt;
+use std::error::Error;
 
-#[derive(PartialEq, Debug,Clone)]
+
+#[derive(PartialEq, Debug, Clone)]
 enum TerrainGround {
     Soil,
     Stone,
 }
 
-#[derive(PartialEq, Debug,Clone)]
+#[derive(PartialEq, Debug, Clone)]
 enum TerrainBlock {
     Tree,
     Soil,
     Stone,
 }
 
-#[derive(PartialEq, Debug,Clone)]
+#[derive(PartialEq, Debug, Clone)]
 enum Being {
     Orc,
     Human,
 }
-#[derive(Debug, PartialEq,Clone)]
+#[derive(Debug, PartialEq, Clone)]
 struct Square {
     ground: TerrainGround,
     block: Option<TerrainBlock>,
@@ -47,25 +49,27 @@ enum MovementError {
     NoBeingInSquare,
     AnotherBeingInSquare,
     FellOffTheGrid,
-    MovedToBadTerrain
+    MovedToBadTerrain,
 }
 
 impl fmt::Display for MovementError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            MovementError::AnotherBeingInSquare => {
-                write!(f, "There's a being in the direction you're trying to move")
-            }
-            MovementError::MovedToBadTerrain => {
-                write!(f, "This being cannot move to stone ground")
-            }
-            MovementError::NoBeingInSquare => {
-                write!(f, "There's no being you can move at those coordinates")
-            }
-            MovementError::FellOffTheGrid => {
-                write!(f, "New coordinates are off the grid!")
-            }
+        write!(f, "MovementError!")
+    }
+}
+
+impl Error for MovementError {
+    fn description(&self) -> &str {
+        match self {
+            NoBeingInSquare => "No being in square.",
+            FellOffTheGrid => "Tried to move off the grid.",
+            AnotherBeingInSquare => "Tried to move onto another being.",
+            MovedToBadTerrain => "Tried to move to inaccesible terrain."
         }
+    }
+
+    fn cause(&self) -> Option<&Error> {
+        None
     }
 }
 
@@ -108,7 +112,7 @@ impl Grid {
         dir: Direction,
     ) -> Result<(usize, usize), MovementError> {
         let copy_of_squares = self.squares.clone();
-        
+
         let index_coords = self.get_vec_index((coord.0, coord.1));
         let new_coords = self.get_new_coords(coord, &dir);
         let index_new_coords = self.get_vec_index(new_coords);
@@ -138,20 +142,18 @@ impl Grid {
 
         // Move the being
         // new square!
-        self.squares[index_new_coords] =
-            Square{
-                ground: new_square.ground.clone(),
-                block: new_square.block.clone(),
-                being: square.being.clone()
-            };
-        
+        self.squares[index_new_coords] = Square {
+            ground: new_square.ground.clone(),
+            block: new_square.block.clone(),
+            being: square.being.clone(),
+        };
+
         // Old square!
-        self.squares[index_coords] =
-            Square {
-                ground: square.ground.clone(),
-                block: square.block.clone(),
-                being: None
-            };
+        self.squares[index_coords] = Square {
+            ground: square.ground.clone(),
+            block: square.block.clone(),
+            being: None,
+        };
 
         Ok(new_coords)
     }
@@ -232,12 +234,12 @@ mod tests {
         grid.squares[4] = ::Square {
             ground: ::TerrainGround::Soil,
             block: None,
-            being: Some(::Being::Orc)
+            being: Some(::Being::Orc),
         };
         grid.squares[7] = ::Square {
             ground: ::TerrainGround::Soil,
             block: None,
-            being: Some(::Being::Human)
+            being: Some(::Being::Human),
         };
 
         // 0  1  2
@@ -256,8 +258,8 @@ mod tests {
 
         grid.squares[0].being = Some(human);
         assert_eq!(
-            grid.move_being_in_coord((0,0), ::Direction::South),
-            Ok((1,0))
+            grid.move_being_in_coord((0, 0), ::Direction::South),
+            Ok((1, 0))
         );
 
         assert_eq!(grid.squares[0].being, None);
